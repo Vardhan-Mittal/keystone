@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keystone</title>
+<style>
+  /* ---- tokens ------------------------------------------------------------
+     Light is defined on bare :root; dark is redefined under BOTH the media
+     query and the [data-theme] scope, so an explicit choice wins either way. */
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;   /* the one series colour (nominal bars) */
+    --ramp-light:     #86b6ef;   /* dumbbell: "owns"   (ordinal, validated) */
+    --ramp-dark:      #1c5cab;   /* dumbbell: "reaches"                     */
+    --meter-track:    #cde2fb;   /* lighter step of the same ramp           */
+    --critical:       #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --ramp-light:     #9ec5f4;
+      --ramp-dark:      #256abf;
+      --meter-track:    #184f95;
+      --critical:       #d03b3b;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --ramp-light:     #9ec5f4;
+    --ramp-dark:      #256abf;
+    --meter-track:    #184f95;
+    --critical:       #d03b3b;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  header { margin-bottom: 64px; }
+  .mark { font-size: 13px; letter-spacing: .14em; text-transform: uppercase;
+          color: var(--text-muted); margin-bottom: 14px; }
+  h1 { font-size: 30px; line-height: 1.25; font-weight: 600; margin: 0 0 14px; letter-spacing: -.01em; }
+  .lede { font-size: 18px; color: var(--text-secondary); margin: 0; max-width: 62ch; }
+
+  section { margin-bottom: 72px; }
+  h2 { font-size: 21px; font-weight: 600; margin: 0 0 8px; letter-spacing: -.01em; }
+  .sub { color: var(--text-secondary); margin: 0 0 28px; max-width: 64ch; }
+
+  /* ---- hero: exactly one per view ------------------------------------- */
+  .hero-figure {
+    font-size: 76px; line-height: 1; font-weight: 600; letter-spacing: -.03em;
+    margin: 0 0 12px;           /* proportional figures, not tabular */
+  }
+  .hero-claim { font-size: 19px; color: var(--text-primary); max-width: 54ch; margin: 0 0 24px; }
+  .meter { height: 10px; border-radius: 999px; background: var(--meter-track);
+           overflow: hidden; max-width: 520px; }
+  .meter > span { display: block; height: 100%; background: var(--series-1);
+                  border-radius: 999px; }
+  .meter-note { font-size: 14px; color: var(--text-muted); margin-top: 10px; }
+
+  /* ---- stat tiles ------------------------------------------------------ */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr));
+          gap: 1px; background: var(--border); border: 1px solid var(--border);
+          border-radius: 12px; overflow: hidden; }
+  .kpi { background: var(--surface-1); padding: 20px 22px; }
+  .kpi .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+  .kpi .value { font-size: 27px; font-weight: 600; letter-spacing: -.02em; }
+  .kpi .foot { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+  /* ---- cards & charts -------------------------------------------------- */
+  .card { background: var(--surface-1); border: 1px solid var(--border);
+          border-radius: 12px; padding: 26px; }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline;
+                gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .chart-title { font-size: 15px; font-weight: 600; }
+  .chart-scroll { overflow-x: auto; }
+  svg { display: block; max-width: 100%; height: auto; }
+
+  .legend { display: flex; gap: 20px; align-items: center; margin-bottom: 18px;
+            font-size: 13px; color: var(--text-secondary); }
+  .legend i { width: 11px; height: 11px; border-radius: 50%; display: inline-block;
+              margin-right: 7px; vertical-align: -1px; }
+
+  .toggle { font: inherit; font-size: 13px; color: var(--text-secondary);
+            background: none; border: 1px solid var(--border); border-radius: 7px;
+            padding: 5px 11px; cursor: pointer; }
+  .toggle:hover { color: var(--text-primary); }
+
+  /* ---- tables (the table-view twin, and the candidates list) ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  caption { text-align: left; font-size: 13px; color: var(--text-muted);
+            padding-bottom: 10px; }
+  th { text-align: left; font-weight: 600; font-size: 12px; letter-spacing: .04em;
+       text-transform: uppercase; color: var(--text-muted);
+       border-bottom: 1px solid var(--baseline); padding: 0 12px 8px 0; }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--gridline);
+       color: var(--text-secondary); }
+  td.name { color: var(--text-primary); font-weight: 500; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody tr:last-child td { border-bottom: none; }
+  .hidden { display: none; }
+
+  /* ---- cited path chain ------------------------------------------------ */
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+           font-size: 13px; margin-top: 4px; }
+  .chain .node { border: 1px solid var(--border); border-radius: 7px;
+                 padding: 4px 9px; background: var(--page); white-space: nowrap; }
+  .chain .node.is-person { border-color: var(--series-1); color: var(--text-primary); font-weight: 600; }
+  .chain .arrow { color: var(--text-muted); }
+
+  /* ---- ask ------------------------------------------------------------- */
+  .ask { display: flex; gap: 10px; flex-wrap: wrap; }
+  .ask input { flex: 1 1 320px; font: inherit; padding: 12px 14px;
+               border: 1px solid var(--border); border-radius: 9px;
+               background: var(--surface-1); color: var(--text-primary); }
+  .ask button { font: inherit; font-weight: 500; padding: 12px 20px; border: none;
+                border-radius: 9px; background: var(--series-1); color: #fff; cursor: pointer; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .chip { font-size: 13px; border: 1px solid var(--border); border-radius: 999px;
+          padding: 6px 13px; background: var(--surface-1); color: var(--text-secondary);
+          cursor: pointer; }
+  .chip:hover { color: var(--text-primary); }
+  .answer { margin-top: 22px; }
+  .answer .meta { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+  pre { background: var(--page); border: 1px solid var(--border); border-radius: 9px;
+        padding: 14px; overflow-x: auto; font-size: 12.5px; line-height: 1.5;
+        color: var(--text-secondary); margin: 14px 0 0; }
+
+  /* ---- tooltip --------------------------------------------------------- */
+  #tip { position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+         background: var(--surface-1); border: 1px solid var(--border);
+         border-radius: 8px; padding: 9px 12px; font-size: 13px; z-index: 50;
+         box-shadow: 0 6px 24px rgba(0,0,0,.14); max-width: 300px; }
+  #tip b { color: var(--text-primary); }
+  #tip span { color: var(--text-secondary); }
+
+  .banner { background: var(--surface-1); border: 1px solid var(--critical);
+            border-left-width: 3px; border-radius: 9px; padding: 16px 18px;
+            margin-bottom: 28px; font-size: 14.5px; }
+  footer { border-top: 1px solid var(--border); padding-top: 24px;
+           font-size: 13px; color: var(--text-muted); }
+  .themebtn { position: fixed; top: 16px; right: 16px; font-size: 12px; }
+</style>
+</head>
+<body>
+<button class="toggle themebtn" id="theme">theme</button>
+<div class="wrap">
+
+<header>
+  <div class="mark">Keystone</div>
+  <h1>Every dependency scanner looks for broken packages.<br>This one looks for the people.</h1>
+  <p class="lede">A package is only as trustworthy as whoever can publish it. Keystone loads a
+  real application's dependency tree into a graph, adds the humans who hold publish rights,
+  and walks the graph to answer one question: <em>who can reach your code, and how?</em></p>
+</header>
+
+<div id="err"></div>
+
+<section id="hero-section">
+  <h2>The headline</h2>
+  <p class="sub" id="hero-sub">Loading the graph…</p>
+  <div class="hero-figure" id="hero-pct">—</div>
+  <p class="hero-claim" id="hero-claim"></p>
+  <div class="meter"><span id="hero-meter" style="width:0%"></span></div>
+  <div class="meter-note" id="hero-path-note"></div>
+  <div class="chain" id="hero-chain"></div>
+</section>
+
+<section>
+  <h2>The tree at a glance</h2>
+  <p class="sub">Counts straight out of the graph — no estimates.</p>
+  <div class="kpis" id="kpis"></div>
+</section>
+
+<section>
+  <h2>Who can reach the most of this tree</h2>
+  <p class="sub">Each bar is one human npm account, measured by how many packages their code
+  can transitively reach. Hover any bar for the full picture.</p>
+  <div class="card">
+    <div class="chart-head">
+      <div class="chart-title">Packages reachable by one account</div>
+      <button class="toggle" data-twin="reach">Table view</button>
+    </div>
+    <div class="chart-scroll"><div id="chart-reach"></div></div>
+    <div id="table-reach" class="hidden"></div>
+  </div>
+</section>
+
+<section>
+  <h2>Why counting packages gets the answer wrong</h2>
+  <p class="sub">The left dot is how many packages an account can publish. The right dot is how
+  much of the tree that actually reaches. The gap is the dependency graph doing the work —
+  and it reorders the ranking.</p>
+  <div class="card">
+    <div class="chart-head">
+      <div class="chart-title">Packages owned versus packages reached</div>
+      <button class="toggle" data-twin="amp">Table view</button>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--ramp-light)"></i>Packages they can publish</span>
+      <span><i style="background:var(--ramp-dark)"></i>Packages that reaches</span>
+    </div>
+    <div class="chart-scroll"><div id="chart-amp"></div></div>
+    <div id="table-amp" class="hidden"></div>
+  </div>
+</section>
+
+<section>
+  <h2>Ask the graph</h2>
+  <p class="sub">Questions are answered by choosing a graph query and running it. Every answer
+  ships the Cypher that produced it, so you can re-run it yourself.</p>
+  <div class="ask">
+    <input id="q" placeholder="e.g. what if qix gets phished?" autocomplete="off">
+    <button id="go">Ask</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="answer" id="answer"></div>
+</section>
+
+<section>
+  <h2>Quiet packages worth a second look</h2>
+  <p class="sub" id="hijack-sub"></p>
+  <div class="card"><div id="table-hijack"></div></div>
+</section>
+
+<footer>
+  <p><strong>What this is not.</strong> A high reach number describes where someone sits in a
+  dependency graph — not whether they can be trusted. Several of the accounts ranked here are
+  themselves past victims of phishing. Concentration is a property of the ecosystem, not a
+  judgement about a person.</p>
+  <p id="foot-src"></p>
+</footer>
+
+</div>
+<div id="tip"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const fmt = n => (n === null || n === undefined) ? "—" : n.toLocaleString("en-US");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---- theme toggle (explicit choice wins over the OS setting) ---------- */
+$("#theme").onclick = () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const next = cur === "dark" ? "light" : cur === "light" ? "dark"
+    : (matchMedia("(prefers-color-scheme: dark)").matches ? "light" : "dark");
+  document.documentElement.setAttribute("data-theme", next);
+  if (STATE) { drawReach(STATE); drawAmp(STATE); }
+};
+
+/* ---- tooltip ---------------------------------------------------------- */
+const tip = $("#tip");
+function showTip(e, html) {
+  tip.innerHTML = html;
+  tip.style.opacity = 1;
+  const pad = 14, r = tip.getBoundingClientRect();
+  let x = e.clientX + pad, y = e.clientY + pad;
+  if (x + r.width > innerWidth - 8) x = e.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = e.clientY - r.height - pad;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => tip.style.opacity = 0;
+
+/* ---- svg helpers ------------------------------------------------------ */
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs = {}) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+/* A bar with its data-end rounded and its baseline end square.
+   rect+rx would round both ends, which the mark spec forbids. */
+function barPath(x, y, w, h, r) {
+  r = Math.min(r, w, h / 2);
+  if (w <= 0) return `M${x},${y}h0`;
+  return `M${x},${y}h${w - r}a${r},${r} 0 0 1 ${r},${r}v${h - 2 * r}`
+       + `a${r},${r} 0 0 1 ${-r},${r}h${-(w - r)}z`;
+}
+/* Nice round axis ticks. The top tick must be >= the data max: stopping at the
+   last tick BELOW the max makes the scale overflow and clips the longest bar. */
+function ticks(max, count = 4) {
+  if (!(max > 0)) return [0, 1];
+  const raw = max / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw) || mag * 10;
+  const top = Math.ceil(max / step) * step;
+  const out = [];
+  for (let v = 0; v <= top + 1e-9; v += step) out.push(Math.round(v));
+  return out;
+}
+
+/* ---- chart 1: horizontal bars, ONE colour (nominal categories) -------- */
+function drawReach(d) {
+  const rows = d.keystones;
+  const host = $("#chart-reach");
+  host.innerHTML = "";
+  const LABEL = 132, RIGHT = 62, ROW = 30, BAR = 16, TOP = 8, AXIS = 34;
+  const W = Math.max(560, host.clientWidth || 560);
+  const plotW = W - LABEL - RIGHT;
+  const H = TOP + rows.length * ROW + AXIS;
+  const max = Math.max(...rows.map(r => r.reach));
+  const tk = ticks(max);
+  const scale = v => (v / tk[tk.length - 1]) * plotW;
+
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H,
+                          role: "img", "aria-label": "Packages reachable by one account" });
+
+  // gridlines: hairline, solid, recessive; drawn under the marks
+  tk.forEach(t => {
+    if (t === 0) return;
+    svg.appendChild(el("line", { x1: LABEL + scale(t), y1: TOP,
+      x2: LABEL + scale(t), y2: TOP + rows.length * ROW,
+      stroke: "var(--gridline)", "stroke-width": 1 }));
+  });
+  // baseline
+  svg.appendChild(el("line", { x1: LABEL, y1: TOP, x2: LABEL, y2: TOP + rows.length * ROW,
+    stroke: "var(--baseline)", "stroke-width": 1 }));
+
+  rows.forEach((r, i) => {
+    const y = TOP + i * ROW + (ROW - BAR) / 2;
+    const w = scale(r.reach);
+
+    const name = el("text", { x: LABEL - 12, y: y + BAR / 2 + 4, "text-anchor": "end",
+      fill: "var(--text-secondary)", "font-size": 13 });
+    name.textContent = r.username.length > 17 ? r.username.slice(0, 16) + "…" : r.username;
+    svg.appendChild(name);
+
+    svg.appendChild(el("path", { d: barPath(LABEL, y, w, BAR, 4), fill: "var(--series-1)" }));
+
+    // Selective direct label: the value at each bar tip is the one number
+    // worth reading here, and there are only ten rows.
+    const val = el("text", { x: LABEL + w + 9, y: y + BAR / 2 + 4,
+      fill: "var(--text-secondary)", "font-size": 12.5 });
+    val.textContent = fmt(r.reach);
+    svg.appendChild(val);
+
+    // Hit target spans the whole row (>= 24px tall), not just the 16px bar.
+    const hit = el("rect", { x: LABEL, y: TOP + i * ROW, width: plotW, height: ROW,
+      fill: "transparent", style: "cursor:pointer" });
+    const pathStr = (r.path || []).join(" → ");
+    hit.addEventListener("mousemove", e => showTip(e,
+      `<b>${esc(r.username)}</b><br><span>can publish to ${fmt(r.owned)} packages<br>`
+      + `reaches <b>${fmt(r.reach)}</b> of ${fmt(d.total_packages)} (${r.reach_pct}%)<br>`
+      + `amplification ${r.amplification}×`
+      + (r.registry_total > 0 ? `<br>${fmt(r.registry_total)} packages npm-wide` : "")
+      + (pathStr ? `<br><br>${esc(pathStr)}` : "") + `</span>`));
+    hit.addEventListener("mouseleave", hideTip);
+    svg.appendChild(hit);
+  });
+
+  // x-axis inside the sized container, so nothing gets a nested scrollbar
+  const ay = TOP + rows.length * ROW;
+  svg.appendChild(el("line", { x1: LABEL, y1: ay, x2: LABEL + plotW, y2: ay,
+    stroke: "var(--baseline)", "stroke-width": 1 }));
+  tk.forEach(t => {
+    const tx = el("text", { x: LABEL + scale(t), y: ay + 18, "text-anchor": "middle",
+      fill: "var(--text-muted)", "font-size": 11.5,
+      style: "font-variant-numeric:tabular-nums" });
+    tx.textContent = fmt(t);
+    svg.appendChild(tx);
+  });
+  const cap = el("text", { x: LABEL, y: ay + 32, fill: "var(--text-muted)", "font-size": 11.5 });
+  cap.textContent = "packages reachable";
+  svg.appendChild(cap);
+
+  host.appendChild(svg);
+}
+
+/* ---- chart 2: dumbbell, one hue in two validated shades --------------- */
+function drawAmp(d) {
+  const rows = [...d.keystones].sort((a, b) => b.amplification - a.amplification);
+  const host = $("#chart-amp");
+  host.innerHTML = "";
+  const LABEL = 132, RIGHT = 70, ROW = 30, TOP = 10, AXIS = 34, R = 5;
+  const W = Math.max(560, host.clientWidth || 560);
+  const plotW = W - LABEL - RIGHT;
+  const H = TOP + rows.length * ROW + AXIS;
+  const max = Math.max(...rows.map(r => Math.max(r.reach, r.owned)));
+  const tk = ticks(max);
+  const scale = v => (v / tk[tk.length - 1]) * plotW;
+
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H,
+    role: "img", "aria-label": "Packages owned versus packages reached" });
+
+  tk.forEach(t => {
+    if (t === 0) return;
+    svg.appendChild(el("line", { x1: LABEL + scale(t), y1: TOP,
+      x2: LABEL + scale(t), y2: TOP + rows.length * ROW,
+      stroke: "var(--gridline)", "stroke-width": 1 }));
+  });
+  svg.appendChild(el("line", { x1: LABEL, y1: TOP, x2: LABEL, y2: TOP + rows.length * ROW,
+    stroke: "var(--baseline)", "stroke-width": 1 }));
+
+  rows.forEach((r, i) => {
+    const cy = TOP + i * ROW + ROW / 2;
+    const x1 = LABEL + scale(r.owned), x2 = LABEL + scale(r.reach);
+
+    const name = el("text", { x: LABEL - 12, y: cy + 4, "text-anchor": "end",
+      fill: "var(--text-secondary)", "font-size": 13 });
+    name.textContent = r.username.length > 17 ? r.username.slice(0, 16) + "…" : r.username;
+    svg.appendChild(name);
+
+    // 2px connector, then dots each with a 2px surface ring so they stay
+    // legible where they nearly touch.
+    svg.appendChild(el("line", { x1, y1: cy, x2, y2: cy,
+      stroke: "var(--baseline)", "stroke-width": 2, "stroke-linecap": "round" }));
+    svg.appendChild(el("circle", { cx: x1, cy, r: R, fill: "var(--ramp-light)",
+      stroke: "var(--surface-1)", "stroke-width": 2 }));
+    svg.appendChild(el("circle", { cx: x2, cy, r: R, fill: "var(--ramp-dark)",
+      stroke: "var(--surface-1)", "stroke-width": 2 }));
+
+    // Label only the multiplier - the thing this chart exists to show.
+    const mult = el("text", { x: LABEL + plotW + 10, y: cy + 4,
+      fill: "var(--text-secondary)", "font-size": 12.5,
+      style: "font-variant-numeric:tabular-nums" });
+    mult.textContent = r.amplification + "×";
+    svg.appendChild(mult);
+
+    const hit = el("rect", { x: LABEL, y: TOP + i * ROW, width: plotW, height: ROW,
+      fill: "transparent", style: "cursor:pointer" });
+    hit.addEventListener("mousemove", e => showTip(e,
+      `<b>${esc(r.username)}</b><br><span>publishes ${fmt(r.owned)} package(s)<br>`
+      + `reaches ${fmt(r.reach)}<br>that is <b>${r.amplification}×</b> their own footprint</span>`));
+    hit.addEventListener("mouseleave", hideTip);
+    svg.appendChild(hit);
+  });
+
+  const ay = TOP + rows.length * ROW;
+  svg.appendChild(el("line", { x1: LABEL, y1: ay, x2: LABEL + plotW, y2: ay,
+    stroke: "var(--baseline)", "stroke-width": 1 }));
+  tk.forEach(t => {
+    const tx = el("text", { x: LABEL + scale(t), y: ay + 18, "text-anchor": "middle",
+      fill: "var(--text-muted)", "font-size": 11.5,
+      style: "font-variant-numeric:tabular-nums" });
+    tx.textContent = fmt(t);
+    svg.appendChild(tx);
+  });
+  const cap = el("text", { x: LABEL, y: ay + 32, fill: "var(--text-muted)", "font-size": 11.5 });
+  cap.textContent = "packages";
+  svg.appendChild(cap);
+
+  host.appendChild(svg);
+}
+
+/* ---- table twins ------------------------------------------------------ */
+function tableHTML(caption, cols, rows) {
+  return `<table><caption>${esc(caption)}</caption><thead><tr>`
+    + cols.map(c => `<th${c.num ? ' style="text-align:right"' : ""}>${esc(c.label)}</th>`).join("")
+    + `</tr></thead><tbody>`
+    + rows.map(r => "<tr>" + cols.map(c =>
+        `<td class="${c.num ? "num" : (c.name ? "name" : "")}">${c.get(r)}</td>`).join("") + "</tr>").join("")
+    + `</tbody></table>`;
+}
+
+function renderTables(d) {
+  $("#table-reach").innerHTML = tableHTML(
+    "Accounts ranked by how many packages their code can transitively reach.",
+    [
+      { label: "Maintainer", name: true, get: r => esc(r.username) },
+      { label: "Owns", num: true, get: r => fmt(r.owned) },
+      { label: "Reaches", num: true, get: r => fmt(r.reach) },
+      { label: "% of tree", num: true, get: r => r.reach_pct + "%" },
+      { label: "npm-wide", num: true, get: r => r.registry_total > 0 ? fmt(r.registry_total) : "—" },
+      { label: "Trust path", get: r => esc((r.path || []).join(" → ")) },
+    ], d.keystones);
+
+  $("#table-amp").innerHTML = tableHTML(
+    "The same accounts, by how much the graph multiplies their footprint.",
+    [
+      { label: "Maintainer", name: true, get: r => esc(r.username) },
+      { label: "Owns", num: true, get: r => fmt(r.owned) },
+      { label: "Reaches", num: true, get: r => fmt(r.reach) },
+      { label: "Amplification", num: true, get: r => r.amplification + "×" },
+      { label: "Hops to app", num: true, get: r => r.hops ?? "—" },
+    ], [...d.keystones].sort((a, b) => b.amplification - a.amplification));
+}
+
+document.querySelectorAll("[data-twin]").forEach(btn => {
+  btn.onclick = () => {
+    const k = btn.dataset.twin;
+    const chart = $("#chart-" + k).parentElement, table = $("#table-" + k);
+    const showing = table.classList.contains("hidden");
+    table.classList.toggle("hidden", !showing);
+    chart.classList.toggle("hidden", showing);
+    btn.textContent = showing ? "Chart view" : "Table view";
+  };
+});
+
+/* ---- cited path chain ------------------------------------------------- */
+function chainHTML(chain) {
+  if (!chain || !chain.length) return "";
+  return chain.map((n, i) =>
+    `<span class="node${i === chain.length - 1 ? " is-person" : ""}">${esc(n)}</span>`
+    + (i < chain.length - 1 ? `<span class="arrow">→</span>` : "")).join("");
+}
+
+/* ---- ask -------------------------------------------------------------- */
+const EXAMPLES = [
+  "who controls the most of my dependency tree?",
+  "what if qix gets phished?",
+  "which packages look like the xz backdoor?",
+  "how does sindresorhus reach my app?",
+  "who has shared publish rights?",
+];
+
+async function doAsk(q) {
+  $("#q").value = q;
+  $("#answer").innerHTML = `<div class="meta">asking the graph…</div>`;
+  try {
+    const r = await fetch("/api/ask", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: q })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "request failed");
+    const chain = (d.path || []).map(p => typeof p === "string" ? p : p.name);
+    $("#answer").innerHTML =
+      `<div class="meta">engine: ${esc(d.engine || "?")}${d.tool ? " · tool: " + esc(d.tool) : ""}</div>`
+      + `<div>${esc(d.summary || d.answer || "no answer")}</div>`
+      + (chain.length ? `<div class="chain" style="margin-top:16px">${chainHTML(chain)}</div>` : "")
+      + (d.cypher ? `<pre>${esc(d.cypher)}</pre>` : "");
+  } catch (e) {
+    $("#answer").innerHTML = `<div class="meta">error</div><div>${esc(e.message)}</div>`;
+  }
+}
+$("#go").onclick = () => doAsk($("#q").value.trim() || EXAMPLES[0]);
+$("#q").addEventListener("keydown", e => { if (e.key === "Enter") $("#go").click(); });
+$("#chips").innerHTML = EXAMPLES.map(e => `<button class="chip">${esc(e)}</button>`).join("");
+document.querySelectorAll(".chip").forEach(c => c.onclick = () => doAsk(c.textContent));
+
+/* ---- boot ------------------------------------------------------------- */
+let STATE = null;
+
+async function boot() {
+  let d;
+  try {
+    const r = await fetch("/api/overview");
+    d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "could not load the graph");
+  } catch (e) {
+    $("#err").innerHTML = `<div class="banner"><strong>The graph is unavailable.</strong><br>`
+      + `${esc(e.message)}<br><br>Keystone has no fallback by design — without FalkorDB there `
+      + `is no product. Start it with <code>docker compose up -d</code>.</div>`;
+    $("#hero-sub").textContent = "";
+    return;
+  }
+  STATE = d;
+  const top = d.keystones[0];
+
+  $("#hero-sub").textContent =
+    `${d.app[0]}@${d.app[1]} — ${fmt(d.total_packages)} packages, ${fmt(d.counts.Person)} maintainers.`;
+  /* One decimal on a display number: "20.87%" reads as false precision. */
+  $("#hero-pct").textContent = top.reach_pct.toFixed(1) + "%";
+  $("#hero-claim").innerHTML =
+    `of this application's dependency tree can be reached by <strong>one person</strong>. `
+    + `The account <strong>${esc(top.username)}</strong> can publish to ${fmt(top.owned)} packages; `
+    + `because other packages depend on those, their code reaches ${fmt(top.reach)} of `
+    + `${fmt(d.total_packages)}.`;
+  $("#hero-meter").style.width = Math.min(100, top.reach_pct) + "%";
+  $("#hero-path-note").textContent = `Shortest trust path (${top.hops} hops):`;
+  $("#hero-chain").innerHTML = chainHTML(top.path);
+
+  const solo = d.solo_maintainer_pct;
+  $("#kpis").innerHTML = [
+    { label: "Packages in the tree", value: fmt(d.total_packages), foot: `${fmt(d.edges.DEPENDS_ON)} dependency edges` },
+    { label: "People who can publish", value: fmt(d.counts.Person), foot: "distinct npm accounts" },
+    { label: "Single-maintainer packages", value: solo + "%", foot: `${fmt(d.solo_maintainer_packages)} have exactly one` },
+    { label: "Quiet + solo + reachable", value: fmt(d.hijack_count), foot: `no release in ${Math.round(d.stale_threshold_days / 365)}+ years` },
+  ].map(k => `<div class="kpi"><div class="label">${k.label}</div>`
+    + `<div class="value">${k.value}</div><div class="foot">${k.foot}</div></div>`).join("");
+
+  drawReach(d); drawAmp(d); renderTables(d);
+
+  const h = await (await fetch("/api/hijack?limit=12")).json();
+  const cands = h.answer.candidates;
+  $("#hijack-sub").textContent =
+    `${d.hijack_count} packages in this tree have exactly one maintainer and no release in `
+    + `over ${Math.round(d.stale_threshold_days / 365)} years, yet code still depends on them. `
+    + `That combination is the shape of the xz-utils backdoor — and no CVE feed reports it, `
+    + `because nothing has been disclosed.`;
+  $("#table-hijack").innerHTML = tableHTML(
+    "Single-maintainer, long-dormant packages, ordered by how many packages in this tree depend on them.",
+    [
+      { label: "Package", name: true, get: r => esc(r.package) },
+      { label: "Version", get: r => esc(r.version) },
+      { label: "Dormant", num: true, get: r => r.stale_years + "y" },
+      { label: "Sole maintainer", get: r => esc(r.maintainer) },
+      { label: "Depended on by", num: true, get: r => fmt(r.dependents) },
+      { label: "OSSF score", num: true, get: r => r.scorecard == null ? "—" : r.scorecard },
+    ], cands);
+
+  $("#foot-src").innerHTML =
+    `Data: deps.dev (resolved dependency graph), npm registry (maintainer rosters), `
+    + `OSSF Scorecard. All public, no credentials. Graph: FalkorDB — `
+    + `${fmt(d.counts.Package + d.counts.Person + d.counts.Project)} nodes, `
+    + `${fmt(Object.values(d.edges).reduce((a, b) => a + b, 0))} edges.`;
+}
+
+addEventListener("resize", () => { if (STATE) { drawReach(STATE); drawAmp(STATE); } });
+boot();
+</script>
+</body>
+</html>

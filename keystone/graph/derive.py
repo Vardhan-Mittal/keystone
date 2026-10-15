@@ -95,6 +95,47 @@ def derive_controls(graph, total_packages: int) -> int:
     return len(rows)
 
 
+_ALL_PACKAGES = "MATCH (p:Package) RETURN p.id ORDER BY p.id"
+
+
+def derive_package_dependents(graph) -> int:
+    """Package.dependents -- how many packages transitively depend on this one.
+
+    Distinct from a maintainer's reach, and the correct weight for ranking a
+    single *package* as a takeover target. Ordering hijack candidates by their
+    maintainer's reach instead made every row of a prolific maintainer's
+    packages report the same number, which read as though each package reached
+    the whole set.
+
+    Same one-hop-per-level expansion as reach_set, for the same reason.
+    """
+    ids = [r[0] for r in read(graph, _ALL_PACKAGES)]
+    rows = []
+    for pid in ids:
+        visited: set[str] = set()
+        frontier = [pid]
+        depth = 0
+        while frontier and depth < MAX_HOPS:
+            nxt = read(graph, _STEP, {"frontier": frontier})[0][0] or []
+            frontier = [x for x in nxt if x not in visited and x != pid]
+            visited.update(frontier)
+            depth += 1
+        rows.append({"id": pid, "n": len(visited)})
+    write(
+        graph,
+        """UNWIND $rows AS r
+           MATCH (p:Package {id:r.id})
+           SET p.dependents = r.n""",
+        {"rows": rows},
+    )
+    try:
+        write(graph, "CREATE INDEX FOR (p:Package) ON (p.dependents)")
+    except Exception as exc:  # noqa: BLE001
+        if "already indexed" not in str(exc).lower():
+            raise
+    return len(rows)
+
+
 def derive_co_maintains(graph, min_shared: int = 2) -> int:
     """Person-[:CO_MAINTAINS_WITH]->Person for people sharing packages.
 
@@ -103,7 +144,7 @@ def derive_co_maintains(graph, min_shared: int = 2) -> int:
     once per unordered pair (a.username < b.username) so the edge is not
     duplicated in both directions.
     """
-    res = write(
+    write(
         graph,
         """MATCH (a:Person)<-[m1:MAINTAINED_BY]-(p:Package)-[m2:MAINTAINED_BY]->(b:Person)
            WHERE a.username < b.username
@@ -113,7 +154,9 @@ def derive_co_maintains(graph, min_shared: int = 2) -> int:
            SET e.count = shared""",
         {"min_shared": min_shared},
     )
-    return res.relationships_created
+    # Report the total, not relationships_created: MERGE is idempotent, so a
+    # re-run creates nothing and "0 edges" would read as a failure.
+    return read(graph, "MATCH ()-[e:CO_MAINTAINS_WITH]->() RETURN count(e)")[0][0]
 
 
 def main() -> None:
@@ -130,8 +173,13 @@ def main() -> None:
     n_co = derive_co_maintains(graph)
     t_co = time.monotonic() - t
 
+    t = time.monotonic()
+    n_pkg = derive_package_dependents(graph)
+    t_pkg = time.monotonic() - t
+
     print(f"  CONTROLS:          {n_controls} edges  [{t_controls:.1f}s]")
     print(f"  CO_MAINTAINS_WITH: {n_co} edges  [{t_co:.1f}s]")
+    print(f"  Package.dependents:{n_pkg} packages  [{t_pkg:.1f}s]")
 
     print("\n  top keystone maintainers by graph reach:")
     rows = read(

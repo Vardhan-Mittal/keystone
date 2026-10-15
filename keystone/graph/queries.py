@@ -253,13 +253,17 @@ def trust_path(graph, username: str) -> dict[str, Any]:
 
 # ------------------------------------------------------ 5. hijack_candidates --
 
+# Ordered by the PACKAGE's own transitive dependents, not its maintainer's
+# overall reach. Ranking by the maintainer made every package belonging to a
+# prolific maintainer report an identical figure, which read as if each one
+# reached the whole set.
 _HIJACK = """
 MATCH (p:Package)-[m:MAINTAINED_BY]->(x:Person)-[c:CONTROLS]->(:App)
 WHERE p.maintainer_count = 1 AND p.stale_days > $stale
 OPTIONAL MATCH (p)-[h:HOSTED_AT]->(pr:Project)
-RETURN p.name, p.version, p.stale_days, x.username, c.reach,
-       c.amplification, pr.scorecard, pr.code_review
-ORDER BY c.reach DESC
+RETURN p.name, p.version, p.stale_days, p.dependents, x.username,
+       c.reach, pr.scorecard, pr.code_review
+ORDER BY p.dependents DESC, p.stale_days DESC
 LIMIT $limit
 """
 
@@ -278,9 +282,9 @@ def hijack_candidates(
         "package",
         "version",
         "stale_days",
+        "dependents",
         "maintainer",
-        "reach",
-        "amplification",
+        "maintainer_reach",
         "scorecard",
         "code_review",
     ]
@@ -297,10 +301,12 @@ def hijack_candidates(
         "cypher": _HIJACK.strip(),
         "summary": (
             f"{len(rows)} packages match the xz pattern: a single maintainer, no "
-            f"release in over {stale_days // 365} years, and real transitive reach."
+            f"release in over {stale_days // 365} years, and packages still "
+            f"depending on them."
             + (
-                f" Worst: {rows[0]['package']} ({rows[0]['stale_years']}y stale, "
-                f"owner {rows[0]['maintainer']}, reaches {rows[0]['reach']})."
+                f" Worst: {rows[0]['package']} -- {rows[0]['stale_years']}y without "
+                f"a release, one maintainer ({rows[0]['maintainer']}), and "
+                f"{rows[0]['dependents']} packages in this tree depend on it."
                 if rows
                 else ""
             )
