@@ -62,11 +62,19 @@ def overview(top_n: int = 10) -> dict[str, Any]:
     g = _graph()
     schema = Q.graph_schema(g)
     keystones = Q.keystone_maintainers(g, top_n=top_n)
-    hijack = Q.hijack_candidates(g, limit=100)
 
     total = keystones["answer"]["total_packages"]
     solo = read(
         g, "MATCH (p:Package) WHERE p.maintainer_count = 1 RETURN count(p)"
+    )[0][0]
+    # Counted, not len() of a LIMITed result -- the headline figure must be the
+    # true total, otherwise the page reports the page size back as a finding.
+    hijack_count = read(
+        g,
+        """MATCH (p:Package)
+           WHERE p.maintainer_count = 1 AND p.stale_days > $stale
+           RETURN count(DISTINCT p)""",
+        {"stale": STALE_DAYS},
     )[0][0]
 
     # A cited path per ranked maintainer: the ranking is only trustworthy if
@@ -84,13 +92,13 @@ def overview(top_n: int = 10) -> dict[str, Any]:
         "total_packages": total,
         "solo_maintainer_packages": solo,
         "solo_maintainer_pct": round(100.0 * solo / total, 1) if total else 0,
-        "hijack_count": len(hijack["answer"]["candidates"]),
+        "hijack_count": hijack_count,
         "stale_threshold_days": STALE_DAYS,
         "keystones": rows,
         "cypher": {
             "keystones": keystones["cypher"],
             "trust_path": Q._TRUST_PATH.strip(),
-            "hijack": hijack["cypher"],
+            "hijack": Q._HIJACK.strip(),
         },
     }
 
