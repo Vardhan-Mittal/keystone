@@ -25,14 +25,15 @@ two graphs.
 
 ## What it found
 
-Pointed at `gatsby@5.16.1` — **1,265 packages, 841 maintainers, 9,553 relationships**:
+Pointed at `gatsby@5.16.1` — **1,265 packages, 841 maintainers, 10,544 relationships**:
 
 | Finding | |
 |---|---|
 | One account (`sindresorhus`) can publish to 153 packages, whose code reaches **264 of 1,265** | **20.9% of the tree** |
 | Packages with exactly **one** maintainer | **696 (55%)** |
-| Single-maintainer packages, dormant 2+ years, still depended on | **92** |
-| `define-data-property` — 2.7y without a release, one maintainer | **52 packages depend on it** |
+| Single-maintainer packages, dormant 2+ years, still depended on | **497** |
+| `es-errors` — 2.7y without a release, one maintainer | **106 packages depend on it** |
+| `js-tokens` — 8.7y without a release, one maintainer | 80 packages depend on it |
 | `util-deprecate` — **11 years** without a release, one maintainer, OSSF score 2.3 | 23 packages depend on it |
 
 ### The result that validates the whole approach
@@ -45,9 +46,14 @@ Attackers published poisoned versions of 18 packages — including `debug` and `
 package named in that path — totalling roughly 2 billion weekly downloads, with an estimated
 blast radius of **~34% of the npm ecosystem**.
 
-Keystone was pointed at a tree with no connection to that incident and surfaced the account that
-was actually hijacked, by structure alone. He was the *victim* of that attack. The tool measures
-**position in a graph, never a person's trustworthiness.**
+It goes further. Among the dormant single-maintainer packages Keystone flags is **`color-convert`**
+— 7.2 years without a release, sole maintainer `qix`, 49 packages in this tree depending on it.
+`color-convert` was one of the packages actually poisoned in that attack.
+
+Keystone was pointed at a tree with no connection to that incident and surfaced both the account
+that was hijacked and one of the packages it was used to poison, by structure alone. He was the
+*victim* of that attack. The tool measures **position in a graph, never a person's
+trustworthiness.**
 
 ---
 
@@ -101,8 +107,8 @@ The UI shows the same failure. There is no cache to fall back to and no second d
 | `:App` | 1 | `name`, `version` |
 | `:Package` | 1,265 | `name`, `version`, `stale_days`, `maintainer_count`, `dependents` |
 | `:Person` | 841 | `username`, `registry_total`, `in_tree_count` |
-| `:Project` | 675 | `scorecard`, `stars`, `maintained`, `code_review` |
-| `:CVE` | 4 | `id`, `cvss`, `aliases` |
+| `:Project` | 820 | `scorecard`, `stars`, `maintained`, `code_review` |
+| `:CVE` | 25 | `id`, `cvss`, `aliases` |
 
 `CONTROLS`, `CO_MAINTAINS_WITH` and `Package.dependents` are **not ingested from any API** — they
 are computed by traversal and written back. The graph is the compute substrate, not storage.
@@ -150,17 +156,18 @@ RETURN collect(DISTINCT d.id) AS nxt
 
 ## Performance
 
-`python -m keystone.scripts.benchmark` — 30 runs each, warm graph, 1,265 packages / 9,553 relationships:
+`python -m keystone.scripts.benchmark` — 30 runs each, warm graph, 1,265 packages / 10,544 relationships:
 
 | Tool | p50 | p95 |
 |---|---|---|
-| `vulnerability_overlay` | 1.07 ms | 1.59 ms |
-| `find_entity` | 1.25 ms | 1.53 ms |
-| `trust_path` | 1.49 ms | 2.52 ms |
-| `keystone_maintainers` | 2.13 ms | 3.15 ms |
-| `hijack_candidates` | 2.30 ms | 3.21 ms |
-| `correlated_risk` | 10.18 ms | 12.48 ms |
-| `compromise_blast_radius` | 11.56 ms | 16.68 ms |
+| `find_entity` | 1.17 ms | 2.30 ms |
+| `vulnerability_overlay` | 1.33 ms | 1.49 ms |
+| `keystone_maintainers` | 2.20 ms | 2.85 ms |
+| `trust_path` | 2.37 ms | 3.11 ms |
+| `hijack_candidates` | 5.75 ms | 7.47 ms |
+| `graph_schema` | 8.04 ms | 14.93 ms |
+| `correlated_risk` | 8.67 ms | 10.56 ms |
+| `compromise_blast_radius` | 8.89 ms | 14.70 ms |
 
 **The performance lesson worth repeating.** The natural way to write reach is:
 
@@ -261,7 +268,7 @@ by an outage. `KEYSTONE_OFFLINE=1` forces cache-only operation and proves it.
   show `registry_total` as unknown rather than zero.
 - **Reach counts packages, not bytes or risk.** A reachable package is not necessarily an
   executed one; `devDependencies` and optional deps are included as deps.dev resolves them.
-- **`:Project` ≠ `:Package`.** 675 projects cover 1,265 packages because monorepos publish many
+- **`:Project` ≠ `:Package`.** 820 projects cover 1,265 packages because monorepos publish many
   packages from one repo, so Scorecard data is sparser than package count suggests.
 - **A high reach number is not an accusation.** It describes ecosystem concentration. Several
   ranked accounts are themselves past victims.

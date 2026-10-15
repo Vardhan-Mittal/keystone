@@ -63,6 +63,31 @@ A single package's takeover risk is *how many packages depend on that package*. 
 table immediately became meaningful: `define-data-property`, 2.7 years dormant, one maintainer,
 52 dependents.
 
+## 4b. Batch deps.dev versions 100 at a time, not 500
+
+**The most dangerous bug in the project, because it failed silently.**
+
+`versionbatch` documents a 5000-request limit, so batching 500 looked conservative. It is not: the
+endpoint returns **at most 100 responses** and hands back a `nextPageToken` for the remainder.
+Sending 500 therefore returned 100 and discarded the rest without erroring.
+
+The damage was invisible from the outside. Publish dates resolved for **290 of 1,384** packages, so
+`stale_days` was `-1` for the other ~1,000 and the entire staleness analysis quietly ran on a fifth
+of the tree. Every number it produced was *real* — just drawn from a fraction of the data. Nothing
+crashed and nothing looked wrong.
+
+Paging turned out to be worse than avoiding it: `pageToken` as a query parameter returns the
+identical page, and in the request body it returns an overlapping one. At `chunk=100` every request
+comes back complete with no token at all.
+
+Recovered by the fix: version metadata **290 → 1,266**, advisories **4 → 25**, projects
+**685 → 820**, and the top hijack candidate changed from `define-data-property` (52 dependents) to
+`es-errors` (**106 dependents**) — a choke point twice the size that the truncated data never saw.
+
+**The lesson:** an API that silently truncates is more dangerous than one that errors. Coverage is
+now printed at every ingest step (`1266/1384 resolved`) precisely so this class of gap is visible
+rather than assumed.
+
 ## 5. npm only
 
 deps.dev resolves transitive dependencies for npm, Cargo, Maven and PyPI. Only npm exposes **both**

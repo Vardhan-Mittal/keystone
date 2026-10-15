@@ -103,13 +103,20 @@ def _reduce_version(v: dict[str, Any]) -> dict[str, Any]:
 
 
 async def version_batch(
-    client: httpx.AsyncClient, keys: list[tuple[str, str]], chunk: int = 500
+    client: httpx.AsyncClient, keys: list[tuple[str, str]], chunk: int = 100
 ) -> dict[tuple[str, str], dict[str, Any]]:
     """Publish dates, advisories and source repos for many versions at once.
 
-    deps.dev accepts up to 5000 per request; we chunk at 500 to keep each cached
-    payload small and each failure cheap. This single endpoint replaces both a
-    per-package date lookup and a separate vulnerability pass.
+    Replaces both a per-package date lookup and a separate vulnerability pass.
+
+    **chunk=100 is load-bearing, not a tuning knob.** The endpoint documents a
+    5000-request limit, but it only ever returns 100 responses and hands back a
+    `nextPageToken` for the rest. Sending 500 therefore silently yielded 100 --
+    publish dates for 290 of 1384 packages, so most of the tree looked
+    date-less and the staleness analysis quietly ran on a fifth of the data.
+    Paging is worse than avoiding it: `pageToken` as a query parameter returns
+    the identical page, and in the body it returns an overlapping one. At
+    chunk=100 every request comes back complete with no token at all.
     """
     out: dict[tuple[str, str], dict[str, Any]] = {}
     for i in range(0, len(keys), chunk):

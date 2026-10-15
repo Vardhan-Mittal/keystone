@@ -315,6 +315,29 @@ def load(bundle: dict[str, Any], graph) -> dict[str, int]:
     }
 
 
+def wait_for_indexes(graph, timeout_s: float = 60.0) -> bool:
+    """Block until every index reports OPERATIONAL.
+
+    FalkorDB builds indexes asynchronously, so a traversal issued immediately
+    after a bulk load can contend with the build and time out. Running derive
+    straight after load failed exactly once this way and then succeeded on a
+    retry -- a race, not a bug in the query. Waiting here removes it.
+    """
+    import time as _t
+
+    deadline = _t.monotonic() + timeout_s
+    while _t.monotonic() < deadline:
+        try:
+            rows = graph.list_indices().result_set
+        except Exception:  # noqa: BLE001 - no indexes yet is fine
+            return True
+        statuses = [r[7] for r in rows if len(r) > 7]
+        if all(s == "OPERATIONAL" for s in statuses):
+            return True
+        _t.sleep(0.5)
+    return False
+
+
 def main() -> None:
     if not BUNDLE.exists():
         raise SystemExit(
@@ -323,7 +346,9 @@ def main() -> None:
     bundle = json.loads(BUNDLE.read_text(encoding="utf-8"))
     graph = connect()
     counts = load(bundle, graph)
+    ready = wait_for_indexes(graph)
     print("\n  loaded:", ", ".join(f"{v} {k}" for k, v in counts.items()))
+    print(f"  indexes {'operational' if ready else 'STILL BUILDING (derive may be slow)'}")
 
     # Sanity counts straight back out of the graph. Relationships are aliased
     # and referenced in the RETURN on purpose: FalkorDB only guarantees "at
