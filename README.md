@@ -200,6 +200,17 @@ graph by hand.
 Verified from a clean volume (`docker compose down -v`), which is also how the one real
 packaging bug was found — see DECISIONS §17.
 
+### Deploying it live
+
+`Dockerfile.allinone` packs FalkorDB and the app into **one container on one port**, so the project
+deploys to any free container host in a single step. `render.yaml` and `fly.toml` are included.
+See [DEPLOY.md](DEPLOY.md).
+
+```bash
+docker build -f Dockerfile.allinone -t keystone-allinone .
+docker run -d -p 8080:8000 keystone-allinone     # verified: graph built, 1265 packages
+```
+
 ### Local development
 
 Requires Python 3.11+.

@@ -1,0 +1,37 @@
+# Single-container Keystone: FalkorDB and the app in one image.
+#
+# The two-service docker-compose.yml is the better local setup. This exists so
+# the project can be deployed to any host that runs ONE container and exposes
+# ONE port (Render, Railway, Fly, Koyeb, Hugging Face Spaces), which is what
+# makes a live demo URL practical.
+FROM falkordb/falkordb:latest
+
+# Debian trixie; the base image ships redis-server + falkordb.so but no Python.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv \
+ && rm -rf /var/lib/apt/lists/*
+
+# A venv, because Debian marks the system Python externally-managed (PEP 668).
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY keystone/ ./keystone/
+COPY web/ ./web/
+COPY mcp_server.py .
+COPY data/bundle.json ./data/bundle.json
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENV PYTHONUNBUFFERED=1 \
+    FALKOR_HOST=127.0.0.1 \
+    FALKOR_PORT=6379 \
+    PORT=8000
+
+EXPOSE 8000
+
+ENTRYPOINT ["/entrypoint.sh"]

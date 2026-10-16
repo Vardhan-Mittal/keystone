@@ -1,0 +1,15 @@
+# Render blueprint: one container, one port.
+#
+# Deploy: push this repo, then on render.com choose
+# "New +" -> "Blueprint" and point it at the repo. Render reads this file.
+services:
+  - type: web
+    name: keystone
+    runtime: docker
+    dockerfilePath: ./Dockerfile.allinone
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      # Optional. Without it the deterministic router answers instead.
+      - key: GEMINI_API_KEY
+        sync: false
