@@ -196,3 +196,46 @@ The framing is load-bearing: the tool measures **structural position, never trus
 was the victim of that attack. Both the README and the UI footer say so explicitly, and the
 agent's system prompt instructs it to describe maintainers as concentrations of risk rather than
 as suspects.
+
+## 17. One-command startup, and the bug only a clean volume could find
+
+`docker compose up` brings up FalkorDB *and* the app, and the app builds its own graph on first
+start from the committed `data/bundle.json`. A judge needs no Python, no API keys and no network.
+
+Committing a 1.5 MB data file is a deliberate trade. It makes the submission reproducible offline
+and lets anyone verify the numbers without waiting on four APIs — worth more here than a clean
+repo.
+
+**The bug this found.** Testing against the already-populated volume passed. Testing from
+`docker compose down -v` — a genuinely fresh volume, which is what a judge gets — failed
+immediately:
+
+```
+redis.exceptions.ResponseError: Invalid graph operation on empty key
+```
+
+FalkorDB raises that when the graph key does not exist *at all*, which is not an error condition —
+it is the normal state before anything is written. Every `count()` in bootstrap, the health check,
+`graph_schema` and the loader's wipe hit it. The first `docker compose up` on a clean checkout
+would have died, and nothing in local testing could have shown it, because my volume always had
+data in it.
+
+Fixed with `db.count()`, `db.count_rel()` and `db.clear()`, which treat an absent graph key as
+empty and let every other error through.
+
+**The lesson:** "works on my machine" and "works on a clean volume" are different claims. The
+second is the one a judge tests.
+
+## 18. Tests assert the claims, not the implementation
+
+`tests/` has 28 smoke tests, and the ones that matter encode the *arguments* the submission makes:
+
+- `test_ordering_by_owned_disagrees_with_ordering_by_reach` — if these two orderings ever agreed,
+  counting packages would be sufficient and the traversal would be decoration. This test failing
+  would mean the project's thesis is wrong, not that a function broke.
+- `test_app_reaches_a_person` — the headline traversal must exist in the data.
+- `test_some_maintainer_is_amplified` — at least one account reaches far more than it owns.
+- `test_reach_is_never_less_than_owned` — reach includes the owned packages, so it cannot be smaller.
+
+Plus the router's tool choices for the five questions the UI offers, and that `find_entity` survives
+RediSearch's reserved characters.

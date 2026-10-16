@@ -184,23 +184,43 @@ timeout into **~5 ms per maintainer** — all 841 in 5 seconds.
 
 ## Running it
 
-Requires Docker and Python 3.11+.
+### One command (what you probably want)
 
 ```bash
-# 1. FalkorDB
-docker compose up -d                      # :6379 server, :3000 browser
+docker compose up
+```
 
-# 2. Dependencies
+Then open **localhost:8000**. That is the whole thing.
+
+Nothing else is needed and **no network access is required**: `data/bundle.json` is committed, so on
+first start the app loads it into FalkorDB and derives the risk edges itself (~30 s), then serves.
+Restarts skip straight to serving. FalkorDB Browser is at **localhost:3000** if you want to walk the
+graph by hand.
+
+Verified from a clean volume (`docker compose down -v`), which is also how the one real
+packaging bug was found — see DECISIONS §17.
+
+### Local development
+
+Requires Python 3.11+.
+
+```bash
+docker compose up -d falkordb             # :6379 server, :3000 browser
 pip install -r requirements.txt
 
-# 3. Ingest -> load -> derive
+python -m keystone.scripts.bootstrap      # load the committed bundle + derive
+python -m uvicorn keystone.api.main:app --port 8000
+
+python -m keystone.agent.loop "what if qix gets phished?"
+python -m pytest tests/ -q                # 28 smoke tests
+```
+
+To rebuild the graph from the live APIs instead of the committed bundle:
+
+```bash
 python -m keystone.scripts.ingest --app gatsby   # ~1-8 min cold, instant cached
 python -m keystone.graph.loader                  # ~5 s
 python -m keystone.graph.derive                  # ~13 s
-
-# 4. Use it
-python -m uvicorn keystone.api.main:app --port 8000   # then open localhost:8000
-python -m keystone.agent.loop "what if qix gets phished?"
 ```
 
 **Point it at your own app:** `python -m keystone.scripts.ingest --app <any-npm-package>`.

@@ -17,7 +17,7 @@ Conventions enforced throughout:
 from typing import Any
 
 from ..config import MAX_HOPS, STALE_DAYS
-from .db import read
+from .db import count, count_rel, read
 
 # Traversal from the app down to a human: dependency edges then the maintainer
 # edge. This single relationship union is what joins the two graphs -- the
@@ -35,7 +35,7 @@ def graph_schema(graph) -> dict[str, Any]:
     """What is in the graph. Lets an agent orient itself before querying."""
     counts = {}
     for label in ("App", "Package", "Person", "Project", "CVE"):
-        counts[label] = read(graph, f"MATCH (n:{label}) RETURN count(n)")[0][0]
+        counts[label] = count(graph, label)
     rels = {}
     for rel in (
         "DEPENDS_ON",
@@ -45,7 +45,7 @@ def graph_schema(graph) -> dict[str, Any]:
         "CONTROLS",
         "CO_MAINTAINS_WITH",
     ):
-        rels[rel] = read(graph, f"MATCH ()-[e:{rel}]->() RETURN count(e)")[0][0]
+        rels[rel] = count_rel(graph, rel)
     app = read(graph, "MATCH (a:App) RETURN a.name, a.version")
     return {
         "answer": {"app": app[0] if app else None, "nodes": counts, "edges": rels},

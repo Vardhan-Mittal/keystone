@@ -37,3 +37,42 @@ def read(graph, cypher: str, params: dict | None = None):
 
 def write(graph, cypher: str, params: dict | None = None):
     return graph.query(cypher, params or {})
+
+
+def _is_empty_key(exc: Exception) -> bool:
+    return "empty key" in str(exc).lower()
+
+
+def count(graph, label: str) -> int:
+    """Count nodes of a label, treating a not-yet-created graph as empty.
+
+    FalkorDB raises "Invalid graph operation on empty key" when the graph key
+    does not exist at all -- which is the normal state on a fresh volume, not an
+    error. Without this, the very first `docker compose up` fails on a clean
+    checkout. Any other error still propagates.
+    """
+    try:
+        return read(graph, f"MATCH (n:{label}) RETURN count(n)")[0][0]
+    except Exception as exc:  # noqa: BLE001
+        if _is_empty_key(exc):
+            return 0
+        raise
+
+
+def count_rel(graph, rel: str) -> int:
+    """Same tolerance, for relationship counts."""
+    try:
+        return read(graph, f"MATCH ()-[e:{rel}]->() RETURN count(e)")[0][0]
+    except Exception as exc:  # noqa: BLE001
+        if _is_empty_key(exc):
+            return 0
+        raise
+
+
+def clear(graph) -> None:
+    """Delete everything, tolerating a graph that does not exist yet."""
+    try:
+        write(graph, "MATCH (n) DETACH DELETE n")
+    except Exception as exc:  # noqa: BLE001
+        if not _is_empty_key(exc):
+            raise

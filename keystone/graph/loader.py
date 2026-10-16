@@ -13,7 +13,7 @@ from typing import Any, Iterable
 
 from ..config import ROOT, WRITE_CHUNK
 from . import schema
-from .db import connect, read, write
+from .db import clear, connect, count, read, write
 
 BUNDLE = ROOT / "data" / "bundle.json"
 NOW = dt.datetime.now(dt.timezone.utc)
@@ -213,7 +213,7 @@ def load(bundle: dict[str, Any], graph) -> dict[str, int]:
 
     # ---- write ---------------------------------------------------------------
     print(f"  wiping graph and rebuilding")
-    write(graph, "MATCH (n) DETACH DELETE n")
+    clear(graph)
     print(f"  indexes: {len(schema.ensure(graph))} ensured")
 
     write(

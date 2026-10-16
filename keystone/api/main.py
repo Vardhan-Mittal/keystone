@@ -17,7 +17,7 @@ from ..agent import router
 from ..agent.loop import ask as agent_ask
 from ..config import ROOT, STALE_DAYS
 from ..graph import queries as Q
-from ..graph.db import GraphUnavailable, connect, read
+from ..graph.db import GraphUnavailable, connect, count, read
 
 app = FastAPI(title="Keystone", version="1.0")
 WEB = ROOT / "web"
@@ -50,7 +50,7 @@ async def _graph_down(_request, exc: GraphUnavailable):
 def health() -> dict[str, Any]:
     try:
         g = _graph()
-        n = read(g, "MATCH (p:Package) RETURN count(p)")[0][0]
+        n = count(g, "Package")
         return {"ok": True, "packages": n}
     except GraphUnavailable as exc:
         return {"ok": False, "detail": str(exc)}
