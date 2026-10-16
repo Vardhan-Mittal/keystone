@@ -25,6 +25,9 @@ two graphs.
 
 ## What it found
 
+> Every number below is checked by `python -m keystone.scripts.verify_claims`, which re-derives
+> each one from the live graph and exits non-zero on any mismatch. Don't take them on trust.
+
 Pointed at `gatsby@5.16.1` — **1,265 packages, 841 maintainers, 10,544 relationships**:
 
 | Finding | |
@@ -158,16 +161,20 @@ RETURN collect(DISTINCT d.id) AS nxt
 
 `python -m keystone.scripts.benchmark` — 30 runs each, warm graph, 1,265 packages / 10,544 relationships:
 
-| Tool | p50 | p95 |
+| Tool | p50 | What it does |
 |---|---|---|
-| `find_entity` | 1.17 ms | 2.30 ms |
-| `vulnerability_overlay` | 1.33 ms | 1.49 ms |
-| `keystone_maintainers` | 2.20 ms | 2.85 ms |
-| `trust_path` | 2.37 ms | 3.11 ms |
-| `hijack_candidates` | 5.75 ms | 7.47 ms |
-| `graph_schema` | 8.04 ms | 14.93 ms |
-| `correlated_risk` | 8.67 ms | 10.56 ms |
-| `compromise_blast_radius` | 8.89 ms | 14.70 ms |
+| `find_entity` | ~1 ms | indexed full-text lookup |
+| `vulnerability_overlay` | ~2 ms | join over a small subgraph |
+| `trust_path` | ~2 ms | `shortestPath` across two edge types |
+| `keystone_maintainers` | ~3 ms | read of pre-derived `CONTROLS` edges |
+| `hijack_candidates` | ~6 ms | filter + join + sort over 1,265 packages |
+| `graph_schema` | ~7 ms | eleven count queries |
+| `correlated_risk` | ~11 ms | pairwise join over the maintainer graph |
+| `compromise_blast_radius` | ~9–15 ms | **live multi-level traversal**, not a lookup |
+
+Figures are rounded because they move run to run — `compromise_blast_radius` measured 8.9 ms and
+15.2 ms on two runs of the same graph, since it is doing real work rather than reading a stored
+value. Run the script yourself rather than trusting the table.
 
 **The performance lesson worth repeating.** The natural way to write reach is:
 
@@ -224,6 +231,7 @@ python -m uvicorn keystone.api.main:app --port 8000
 
 python -m keystone.agent.loop "what if qix gets phished?"
 python -m pytest tests/ -q                # 28 smoke tests
+python -m keystone.scripts.verify_claims  # re-check every number in this README
 ```
 
 To rebuild the graph from the live APIs instead of the committed bundle:
