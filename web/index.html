@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Keystone</title>
+<title>Keystone — who can publish into your dependency tree</title>
+<meta name="description" content="Maps the human attack surface of an npm dependency tree: which people can publish into your app, ranked by transitive graph reach, with a cited path.">
 <style>
   /* ---- tokens ------------------------------------------------------------
      Light is defined on bare :root; dark is redefined under BOTH the media
@@ -160,6 +161,11 @@
         color: var(--text-secondary); margin: 14px 0 0; }
 
   /* ---- tooltip --------------------------------------------------------- */
+  svg rect[tabindex]:focus-visible { outline: 2px solid var(--series-1); outline-offset: -2px; }
+  .toggle:focus-visible, .chip:focus-visible, .ask button:focus-visible,
+  .ask input:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
   #tip { position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
          background: var(--surface-1); border: 1px solid var(--border);
          border-radius: 8px; padding: 9px 12px; font-size: 13px; z-index: 50;
@@ -294,6 +300,34 @@ function showTip(e, html) {
 }
 const hideTip = () => tip.style.opacity = 0;
 
+/* Focus has no cursor, so anchor the tooltip to the element's own box.
+   Keyboard users must get exactly what hover gives. */
+function showTipAt(node, html) {
+  tip.innerHTML = html;
+  tip.style.opacity = 1;
+  const b = node.getBoundingClientRect(), r = tip.getBoundingClientRect(), pad = 10;
+  let x = Math.min(b.left + pad, innerWidth - r.width - 8);
+  let y = b.bottom + pad;
+  if (y + r.height > innerHeight - 8) y = b.top - r.height - pad;
+  tip.style.left = Math.max(8, x) + "px";
+  tip.style.top = Math.max(8, y) + "px";
+}
+
+/* One source of truth per chart, used by both hover and focus. */
+function tipReach(r, d) {
+  const pathStr = (r.path || []).join(" → ");
+  return `<b>${esc(r.username)}</b><br><span>can publish to ${fmt(r.owned)} packages<br>`
+    + `reaches <b>${fmt(r.reach)}</b> of ${fmt(d.total_packages)} (${r.reach_pct}%)<br>`
+    + `amplification ${r.amplification}×`
+    + (r.registry_total > 0 ? `<br>${fmt(r.registry_total)} packages npm-wide` : "")
+    + (pathStr ? `<br><br>${esc(pathStr)}` : "") + `</span>`;
+}
+
+function tipAmp(r) {
+  return `<b>${esc(r.username)}</b><br><span>publishes ${fmt(r.owned)} package(s)<br>`
+    + `reaches ${fmt(r.reach)}<br>that is <b>${r.amplification}×</b> their own footprint</span>`;
+}
+
 /* ---- svg helpers ------------------------------------------------------ */
 const NS = "http://www.w3.org/2000/svg";
 function el(tag, attrs = {}) {
@@ -327,8 +361,10 @@ function drawReach(d) {
   const rows = d.keystones;
   const host = $("#chart-reach");
   host.innerHTML = "";
-  const LABEL = 132, RIGHT = 62, ROW = 30, BAR = 16, TOP = 8, AXIS = 34;
-  const W = Math.max(560, host.clientWidth || 560);
+  const narrow = (host.clientWidth || 560) < 480;
+  const LABEL = narrow ? 92 : 132, RIGHT = narrow ? 48 : 62;
+  const ROW = 30, BAR = 16, TOP = 8, AXIS = 34;
+  const W = Math.max(narrow ? 420 : 560, host.clientWidth || 560);
   const plotW = W - LABEL - RIGHT;
   const H = TOP + rows.length * ROW + AXIS;
   const max = Math.max(...rows.map(r => r.reach));
@@ -355,7 +391,8 @@ function drawReach(d) {
 
     const name = el("text", { x: LABEL - 12, y: y + BAR / 2 + 4, "text-anchor": "end",
       fill: "var(--text-secondary)", "font-size": 13 });
-    name.textContent = r.username.length > 17 ? r.username.slice(0, 16) + "…" : r.username;
+    const cap = narrow ? 11 : 17;
+    name.textContent = r.username.length > cap ? r.username.slice(0, cap - 1) + "…" : r.username;
     svg.appendChild(name);
 
     svg.appendChild(el("path", { d: barPath(LABEL, y, w, BAR, 4), fill: "var(--series-1)" }));
@@ -369,15 +406,13 @@ function drawReach(d) {
 
     // Hit target spans the whole row (>= 24px tall), not just the 16px bar.
     const hit = el("rect", { x: LABEL, y: TOP + i * ROW, width: plotW, height: ROW,
-      fill: "transparent", style: "cursor:pointer" });
-    const pathStr = (r.path || []).join(" → ");
-    hit.addEventListener("mousemove", e => showTip(e,
-      `<b>${esc(r.username)}</b><br><span>can publish to ${fmt(r.owned)} packages<br>`
-      + `reaches <b>${fmt(r.reach)}</b> of ${fmt(d.total_packages)} (${r.reach_pct}%)<br>`
-      + `amplification ${r.amplification}×`
-      + (r.registry_total > 0 ? `<br>${fmt(r.registry_total)} packages npm-wide` : "")
-      + (pathStr ? `<br><br>${esc(pathStr)}` : "") + `</span>`));
+      fill: "transparent", style: "cursor:pointer", tabindex: "0", role: "img",
+      "aria-label": `${r.username}: publishes ${r.owned}, reaches ${r.reach} of `
+        + `${d.total_packages} packages` });
+    hit.addEventListener("mousemove", e => showTip(e, tipReach(r, d)));
     hit.addEventListener("mouseleave", hideTip);
+    hit.addEventListener("focus", () => showTipAt(hit, tipReach(r, d)));
+    hit.addEventListener("blur", hideTip);
     svg.appendChild(hit);
   });
 
@@ -404,8 +439,10 @@ function drawAmp(d) {
   const rows = [...d.keystones].sort((a, b) => b.amplification - a.amplification);
   const host = $("#chart-amp");
   host.innerHTML = "";
-  const LABEL = 132, RIGHT = 70, ROW = 30, TOP = 10, AXIS = 34, R = 5;
-  const W = Math.max(560, host.clientWidth || 560);
+  const narrow = (host.clientWidth || 560) < 480;
+  const LABEL = narrow ? 92 : 132, RIGHT = narrow ? 56 : 70;
+  const ROW = 30, TOP = 10, AXIS = 34, R = 5;
+  const W = Math.max(narrow ? 420 : 560, host.clientWidth || 560);
   const plotW = W - LABEL - RIGHT;
   const H = TOP + rows.length * ROW + AXIS;
   const max = Math.max(...rows.map(r => Math.max(r.reach, r.owned)));
@@ -430,7 +467,8 @@ function drawAmp(d) {
 
     const name = el("text", { x: LABEL - 12, y: cy + 4, "text-anchor": "end",
       fill: "var(--text-secondary)", "font-size": 13 });
-    name.textContent = r.username.length > 17 ? r.username.slice(0, 16) + "…" : r.username;
+    const cap = narrow ? 11 : 17;
+    name.textContent = r.username.length > cap ? r.username.slice(0, cap - 1) + "…" : r.username;
     svg.appendChild(name);
 
     // 2px connector, then dots each with a 2px surface ring so they stay
@@ -450,11 +488,13 @@ function drawAmp(d) {
     svg.appendChild(mult);
 
     const hit = el("rect", { x: LABEL, y: TOP + i * ROW, width: plotW, height: ROW,
-      fill: "transparent", style: "cursor:pointer" });
-    hit.addEventListener("mousemove", e => showTip(e,
-      `<b>${esc(r.username)}</b><br><span>publishes ${fmt(r.owned)} package(s)<br>`
-      + `reaches ${fmt(r.reach)}<br>that is <b>${r.amplification}×</b> their own footprint</span>`));
+      fill: "transparent", style: "cursor:pointer", tabindex: "0", role: "img",
+      "aria-label": `${r.username}: publishes ${r.owned}, reaches ${r.reach}, `
+        + `${r.amplification} times their own footprint` });
+    hit.addEventListener("mousemove", e => showTip(e, tipAmp(r)));
     hit.addEventListener("mouseleave", hideTip);
+    hit.addEventListener("focus", () => showTipAt(hit, tipAmp(r)));
+    hit.addEventListener("blur", hideTip);
     svg.appendChild(hit);
   });
 
@@ -578,6 +618,13 @@ async function boot() {
     return;
   }
   STATE = d;
+  if (!d.keystones || !d.keystones.length) {
+    $("#err").innerHTML = `<div class="banner"><strong>The graph has no derived risk edges.</strong>`
+      + `<br>Packages are loaded but CONTROLS has not been computed, so there is nothing to rank.`
+      + `<br><br>Run <code>python -m keystone.graph.derive</code>.</div>`;
+    $("#hero-sub").textContent = "";
+    return;
+  }
   const top = d.keystones[0];
 
   $("#hero-sub").textContent =
@@ -629,6 +676,7 @@ async function boot() {
     + `${fmt(Object.values(d.edges).reduce((a, b) => a + b, 0))} edges.`;
 }
 
+addEventListener("keydown", e => { if (e.key === "Escape") hideTip(); });
 addEventListener("resize", () => { if (STATE) { drawReach(STATE); drawAmp(STATE); } });
 boot();
 </script>
