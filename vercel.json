@@ -1,0 +1,17 @@
+{
+  "services": {
+    "keystone": {
+      "root": ".",
+      "entrypoint": "app.py"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "type": "service",
+        "service": "keystone"
+      }
+    }
+  ]
+}

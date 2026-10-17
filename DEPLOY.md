@@ -47,6 +47,26 @@ fly deploy
 `fly.toml` requests 1 GB — FalkorDB plus Python needs headroom at boot, and 256 MB is not enough.
 Change `primary_region` to the one nearest you.
 
+## Vercel + FalkorDB Cloud
+
+Vercel runs only serverless functions, so FalkorDB cannot live there. The app goes on Vercel
+(`app.py` is the entrypoint, `vercel.json` routes every path to it) and the graph lives on a
+FalkorDB Cloud instance.
+
+1. Create a free instance on FalkorDB Cloud. Pick AWS `us-east-1`, close to Vercel's default
+   function region, because each page load makes about a dozen graph round trips.
+2. Add its connection details to the Vercel project (production):
+   `FALKOR_HOST`, `FALKOR_PORT`, `FALKOR_USERNAME`, `FALKOR_PASSWORD`, plus `FALKOR_SSL=1` if the
+   instance requires TLS. Optionally `GEMINI_API_KEY`.
+3. Build the graph once from your machine against that instance:
+
+```bash
+vercel env pull .env.local
+set -a; . ./.env.local; set +a; python -m keystone.scripts.bootstrap
+```
+
+4. `vercel deploy --prod`.
+
 ## FalkorDB Cloud + any app host
 
 If you would rather use managed FalkorDB (the rules allow it), skip the all-in-one image: deploy the

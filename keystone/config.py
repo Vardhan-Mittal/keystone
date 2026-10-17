@@ -8,6 +8,10 @@ CACHE_DIR = ROOT / "data" / "cache"
 # --- FalkorDB -----------------------------------------------------------------
 FALKOR_HOST = os.getenv("FALKOR_HOST", "localhost")
 FALKOR_PORT = int(os.getenv("FALKOR_PORT", "6379"))
+# Only needed for a managed instance (FalkorDB Cloud); local Docker has no auth.
+FALKOR_USERNAME = os.getenv("FALKOR_USERNAME") or None
+FALKOR_PASSWORD = os.getenv("FALKOR_PASSWORD") or None
+FALKOR_SSL = os.getenv("FALKOR_SSL", "") == "1"
 GRAPH_NAME = os.getenv("KEYSTONE_GRAPH", "keystone")
 
 # --- External APIs (all public, keyless) --------------------------------------

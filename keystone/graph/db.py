@@ -6,7 +6,14 @@ a silent fallback would make the removal test meaningless.
 """
 from falkordb import FalkorDB
 
-from ..config import FALKOR_HOST, FALKOR_PORT, GRAPH_NAME
+from ..config import (
+    FALKOR_HOST,
+    FALKOR_PASSWORD,
+    FALKOR_PORT,
+    FALKOR_SSL,
+    FALKOR_USERNAME,
+    GRAPH_NAME,
+)
 
 
 class GraphUnavailable(RuntimeError):
@@ -15,7 +22,13 @@ class GraphUnavailable(RuntimeError):
 
 def connect(name: str | None = None):
     try:
-        db = FalkorDB(host=FALKOR_HOST, port=FALKOR_PORT)
+        db = FalkorDB(
+            host=FALKOR_HOST,
+            port=FALKOR_PORT,
+            username=FALKOR_USERNAME,
+            password=FALKOR_PASSWORD,
+            ssl=FALKOR_SSL,
+        )
         db.connection.ping()
     except Exception as exc:  # noqa: BLE001 - any failure here is fatal by design
         raise GraphUnavailable(

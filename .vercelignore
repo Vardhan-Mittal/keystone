@@ -1,0 +1,15 @@
+.git/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.claude/
+data/cache/
+tests/
+Dockerfile
+Dockerfile.allinone
+docker-compose.yml
+entrypoint.sh
+fly.toml
+render.yaml
