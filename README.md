@@ -5,6 +5,9 @@
 Built for [Graph Hacks: Context for AI Agents](https://www.wemakedevs.org/hackathons/falkordb)
 (WeMakeDevs × FalkorDB) — **Track 01, Agents That Act on Connected Data**.
 
+**Live demo: https://keystone-yiur.onrender.com** — Render free tier, so the first visit after it
+has been idle takes about 40 s while the container wakes and rebuilds the graph.
+
 ---
 
 ## The problem
@@ -214,7 +217,8 @@ packaging bug was found — see DECISIONS §17.
 ### Deploying it live
 
 `Dockerfile.allinone` packs FalkorDB and the app into **one container on one port**, so the project
-deploys to any free container host in a single step. `render.yaml` and `fly.toml` are included.
+deploys to any free container host in a single step. `render.yaml` and `fly.toml` are included; the live
+demo above runs from `render.yaml`.
 See [DEPLOY.md](DEPLOY.md).
 
 ```bash
