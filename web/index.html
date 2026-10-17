@@ -677,7 +677,9 @@ function renderAnswer(d) {
       + (trace.length ? stepsHTML(trace) : "");
   }
   // The deterministic router: one tool, one query.
-  return `<div class="meta">engine: ${esc(d.engine || "?")}${d.tool ? " · tool: " + esc(d.tool) : ""}</div>`
+  const why = d.llm_error ? ` (${/429|RESOURCE_EXHAUSTED|quota/i.test(d.llm_error)
+    ? "Gemini rate limit reached" : "Gemini unavailable"}; answered without the LLM)` : "";
+  return `<div class="meta">engine: ${esc(d.engine || "?")}${d.tool ? " · tool: " + esc(d.tool) : ""}${esc(why)}</div>`
     + `<div>${esc(d.summary || "no answer")}</div>` + chainBlock
     + (d.cypher ? `<pre>${esc(d.cypher)}</pre>` : "");
 }

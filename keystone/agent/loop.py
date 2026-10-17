@@ -130,6 +130,9 @@ def ask(question: str, *, use_llm: bool = True, verbose: bool = False) -> dict[s
         print(f"  (gemini failed, using router: {exc})", file=sys.stderr)
         out = router.route(graph, question)
         out["engine"] = "deterministic-router (gemini failed)"
+        # Surfaced so a failure is diagnosable from the response, not only from
+        # server logs. API errors carry a status and message, never the key.
+        out["llm_error"] = str(exc)[:240]
         return out
 
     out = router.route(graph, question)
