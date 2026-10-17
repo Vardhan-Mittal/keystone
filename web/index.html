@@ -672,7 +672,8 @@ function renderAnswer(d) {
   const trace = d.trace || [];
   if ((d.engine || "").startsWith("gemini") && typeof d.answer === "string") {
     return `<div class="meta">Gemini agent (${esc(d.engine.split(":")[1] || "")}) · `
-      + `${trace.length} tool call${trace.length === 1 ? "" : "s"}</div>`
+      + `${trace.length} tool call${trace.length === 1 ? "" : "s"}`
+      + `${d.cached ? " · cached: asked before, and the graph is read-only" : ""}</div>`
       + `<div class="md">${md(d.answer)}</div>` + chainBlock
       + (trace.length ? stepsHTML(trace) : "");
   }

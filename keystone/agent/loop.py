@@ -17,8 +17,20 @@ from ..graph.db import connect
 from . import router
 from .tools import call, gemini_declarations
 
-# gemini-2.5-flash is closed to new API keys, so new deployments 404 on it.
-MODEL = os.getenv("KEYSTONE_MODEL", "gemini-3.8-flash")
+# Tried in order. Free-tier quotas are per model, so when the first is rate
+# limited the second still has its own allowance. gemini-2.5-flash is closed to
+# new API keys, so new deployments 404 on it.
+MODELS = [
+    m.strip()
+    for m in os.getenv("KEYSTONE_MODEL", "gemini-3.8-flash,gemini-3.5-flash-lite").split(",")
+    if m.strip()
+]
+
+# Successful agent answers, by normalised question. The graph is read-only, so
+# an answer cannot go stale, and repeat questions (the example chips) stop
+# spending API quota. Bounded so a public deployment cannot grow it forever.
+_CACHE: dict[str, dict[str, Any]] = {}
+_CACHE_MAX = 256
 MAX_STEPS = 6
 
 SYSTEM = """You are Keystone, an analyst for software supply-chain risk.
@@ -67,6 +79,39 @@ def ask(question: str, *, use_llm: bool = True, verbose: bool = False) -> dict[s
     if client is None:
         return router.route(graph, question)
 
+    key = " ".join(question.lower().split())
+    if key in _CACHE:
+        return {**_CACHE[key], "cached": True}
+
+    errors = []
+    for model in MODELS:
+        try:
+            out = _agent(client, graph, question, model, verbose)
+        except Exception as exc:  # noqa: BLE001 - any API failure: next model, then router
+            print(f"  (gemini {model} failed: {exc})", file=sys.stderr)
+            errors.append(exc)
+            continue
+        if out is None:
+            break
+        if len(_CACHE) >= _CACHE_MAX:
+            _CACHE.pop(next(iter(_CACHE)))
+        _CACHE[key] = out
+        return out
+
+    out = router.route(graph, question)
+    if errors and len(errors) == len(MODELS):
+        out["engine"] = "deterministic-router (gemini failed)"
+        # Surfaced so a failure is diagnosable from the response, not only from
+        # server logs. API errors carry a status and message, never the key.
+        out["llm_error"] = str(errors[-1])[:240]
+    else:
+        out["engine"] = "deterministic-router (agent did not converge)"
+    return out
+
+
+def _agent(client, graph, question: str, model: str, verbose: bool) -> dict[str, Any] | None:
+    """One model's tool-calling loop. None if it never settles on an answer;
+    raises on any API error so the caller can try the next model."""
     from google.genai import types
 
     config = types.GenerateContentConfig(
@@ -80,64 +125,52 @@ def ask(question: str, *, use_llm: bool = True, verbose: bool = False) -> dict[s
     ]
     trace: list[dict[str, Any]] = []
 
-    try:
-        for _ in range(MAX_STEPS):
-            resp = client.models.generate_content(
-                model=MODEL, contents=contents, config=config
-            )
-            cand = (resp.candidates or [None])[0]
-            if cand is None or not cand.content or not cand.content.parts:
-                break
+    for _ in range(MAX_STEPS):
+        resp = client.models.generate_content(
+            model=model, contents=contents, config=config
+        )
+        cand = (resp.candidates or [None])[0]
+        if cand is None or not cand.content or not cand.content.parts:
+            break
 
-            calls = [p.function_call for p in cand.content.parts if p.function_call]
-            if not calls:
-                text = "".join(p.text or "" for p in cand.content.parts).strip()
-                return {
-                    "answer": text,
-                    "summary": text,
-                    "trace": trace,
-                    "engine": f"gemini:{MODEL}",
-                    "path": trace[-1]["result"].get("path", []) if trace else [],
-                    "cypher": trace[-1]["result"].get("cypher", "") if trace else "",
-                }
+        calls = [p.function_call for p in cand.content.parts if p.function_call]
+        if not calls:
+            text = "".join(p.text or "" for p in cand.content.parts).strip()
+            return {
+                "answer": text,
+                "summary": text,
+                "trace": trace,
+                "engine": f"gemini:{model}",
+                "path": trace[-1]["result"].get("path", []) if trace else [],
+                "cypher": trace[-1]["result"].get("cypher", "") if trace else "",
+            }
 
-            # The model's turn goes back verbatim: Gemini 3 attaches thought
-            # signatures to it and rejects a follow-up that drops them.
-            contents.append(cand.content)
-            responses = []
-            for fc in calls:
-                args = dict(fc.args or {})
-                result = call(graph, fc.name, args)
-                if verbose:
-                    print(f"  -> {fc.name}({args}): {result['summary'][:150]}")
-                trace.append({"tool": fc.name, "args": args, "result": result})
-                responses.append(
-                    types.Part.from_function_response(
-                        name=fc.name,
-                        # The model gets the summary and the path, not whole
-                        # result sets: a 1265-row payload wastes the context
-                        # window and degrades the answer.
-                        response={
-                            "summary": result["summary"],
-                            "data": _trim(result.get("answer")),
-                            "cypher": result.get("cypher", ""),
-                        },
-                    )
+        # The model's turn goes back verbatim: Gemini 3 attaches thought
+        # signatures to it and rejects a follow-up that drops them.
+        contents.append(cand.content)
+        responses = []
+        for fc in calls:
+            args = dict(fc.args or {})
+            result = call(graph, fc.name, args)
+            if verbose:
+                print(f"  -> {fc.name}({args}): {result['summary'][:150]}")
+            trace.append({"tool": fc.name, "args": args, "result": result})
+            responses.append(
+                types.Part.from_function_response(
+                    name=fc.name,
+                    # The model gets the summary and the path, not whole
+                    # result sets: a 1265-row payload wastes the context
+                    # window and degrades the answer.
+                    response={
+                        "summary": result["summary"],
+                        "data": _trim(result.get("answer")),
+                        "cypher": result.get("cypher", ""),
+                    },
                 )
-            # Parallel calls are answered together, in one turn.
-            contents.append(types.Content(role="user", parts=responses))
-    except Exception as exc:  # noqa: BLE001 - any API failure falls back
-        print(f"  (gemini failed, using router: {exc})", file=sys.stderr)
-        out = router.route(graph, question)
-        out["engine"] = "deterministic-router (gemini failed)"
-        # Surfaced so a failure is diagnosable from the response, not only from
-        # server logs. API errors carry a status and message, never the key.
-        out["llm_error"] = str(exc)[:240]
-        return out
-
-    out = router.route(graph, question)
-    out["engine"] = "deterministic-router (agent did not converge)"
-    return out
+            )
+        # Parallel calls are answered together, in one turn.
+        contents.append(types.Content(role="user", parts=responses))
+    return None
 
 
 def _trim(answer: Any, limit: int = 12) -> Any:
