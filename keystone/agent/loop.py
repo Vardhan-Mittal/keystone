@@ -17,7 +17,8 @@ from ..graph.db import connect
 from . import router
 from .tools import call, gemini_declarations
 
-MODEL = os.getenv("KEYSTONE_MODEL", "gemini-2.5-flash")
+# gemini-2.5-flash is closed to new API keys, so new deployments 404 on it.
+MODEL = os.getenv("KEYSTONE_MODEL", "gemini-3.8-flash")
 MAX_STEPS = 6
 
 SYSTEM = """You are Keystone, an analyst for software supply-chain risk.
@@ -71,7 +72,8 @@ def ask(question: str, *, use_llm: bool = True, verbose: bool = False) -> dict[s
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM,
         tools=[types.Tool(function_declarations=gemini_declarations())],
-        temperature=0.0,
+        # No temperature override: Gemini 3 is tuned for the default, and Google
+        # warns that lowering it can make tool-calling loops repeat themselves.
     )
     contents: list[Any] = [
         types.Content(role="user", parts=[types.Part(text=question)])
@@ -99,31 +101,31 @@ def ask(question: str, *, use_llm: bool = True, verbose: bool = False) -> dict[s
                     "cypher": trace[-1]["result"].get("cypher", "") if trace else "",
                 }
 
+            # The model's turn goes back verbatim: Gemini 3 attaches thought
+            # signatures to it and rejects a follow-up that drops them.
             contents.append(cand.content)
+            responses = []
             for fc in calls:
                 args = dict(fc.args or {})
                 result = call(graph, fc.name, args)
                 if verbose:
                     print(f"  -> {fc.name}({args}): {result['summary'][:150]}")
                 trace.append({"tool": fc.name, "args": args, "result": result})
-                contents.append(
-                    types.Content(
-                        role="user",
-                        parts=[
-                            types.Part.from_function_response(
-                                name=fc.name,
-                                # The model gets the summary and the path, not
-                                # whole result sets: a 1265-row payload wastes
-                                # the context window and degrades the answer.
-                                response={
-                                    "summary": result["summary"],
-                                    "data": _trim(result.get("answer")),
-                                    "cypher": result.get("cypher", ""),
-                                },
-                            )
-                        ],
+                responses.append(
+                    types.Part.from_function_response(
+                        name=fc.name,
+                        # The model gets the summary and the path, not whole
+                        # result sets: a 1265-row payload wastes the context
+                        # window and degrades the answer.
+                        response={
+                            "summary": result["summary"],
+                            "data": _trim(result.get("answer")),
+                            "cypher": result.get("cypher", ""),
+                        },
                     )
                 )
+            # Parallel calls are answered together, in one turn.
+            contents.append(types.Content(role="user", parts=responses))
     except Exception as exc:  # noqa: BLE001 - any API failure falls back
         print(f"  (gemini failed, using router: {exc})", file=sys.stderr)
         out = router.route(graph, question)
