@@ -73,7 +73,8 @@ def main() -> None:
            WHERE p.maintainer_count = 1 AND p.stale_days > 730
            RETURN count(DISTINCT p)""",
     )[0][0]
-    check("solo + dormant 2y+ packages", dormant, 497)
+    # Measured from load day, so it drifts upward: 498 as of 2026-10-18 (see README).
+    check("solo + dormant 2y+ packages", dormant, 498)
 
     print("\nThe qix result")
     rows = Q.keystone_maintainers(g, top_n=10)["answer"]["maintainers"]

@@ -126,7 +126,6 @@ def load(bundle: dict[str, Any], graph) -> dict[str, int]:
             person_rows.append(
                 {
                     "username": u,
-                    "email": m.get("email", ""),
                     # -1 means "not looked up" (outside the capped top-N), which
                     # queries must treat as unknown rather than as zero.
                     "registry_total": f.get("total", -1),
@@ -238,7 +237,7 @@ def load(bundle: dict[str, Any], graph) -> dict[str, int]:
         graph,
         """UNWIND $rows AS r
            MERGE (x:Person {username:r.username})
-           SET x.email=r.email, x.registry_total=r.registry_total,
+           SET x.registry_total=r.registry_total,
                x.in_tree_count=r.in_tree_count""",
         person_rows,
         "Person",

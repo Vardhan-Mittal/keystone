@@ -161,7 +161,7 @@ def find_entity(graph, name: str, limit: int = 8) -> dict[str, Any]:
 
 _KEYSTONE = """
 MATCH (x:Person)-[c:CONTROLS]->(a:App)
-RETURN x.username, x.email, c.owned, c.reach, c.reach_pct,
+RETURN x.username, c.owned, c.reach, c.reach_pct,
        c.amplification, x.registry_total
 ORDER BY c.reach DESC
 LIMIT $top_n
@@ -176,7 +176,6 @@ def keystone_maintainers(graph, top_n: int = 10) -> dict[str, Any]:
     """
     keys = [
         "username",
-        "email",
         "owned",
         "reach",
         "reach_pct",

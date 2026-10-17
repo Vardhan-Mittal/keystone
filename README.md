@@ -34,10 +34,14 @@ Pointed at `gatsby@5.16.1` — **1,265 packages, 841 maintainers, 10,544 relatio
 |---|---|
 | One account (`sindresorhus`) can publish to 153 packages, whose code reaches **264 of 1,265** | **20.9% of the tree** |
 | Packages with exactly **one** maintainer | **696 (55%)** |
-| Single-maintainer packages, dormant 2+ years, still depended on | **497** |
+| Single-maintainer packages, dormant 2+ years, still depended on | **498**\* |
 | `es-errors` — 2.7y without a release, one maintainer | **106 packages depend on it** |
 | `js-tokens` — 8.7y without a release, one maintainer | 80 packages depend on it |
 | `util-deprecate` — **11 years** without a release, one maintainer, OSSF score 2.3 | 23 packages depend on it |
+
+\* Dormancy is measured from the day the graph is loaded, so this count only grows as the
+calendar moves: 497 on 17 Oct 2026, 498 from 18 Oct when `picocolors` passed two years, 499 from
+25 Oct (`xmlhttprequest-ssl`).
 
 ### The result that validates the whole approach
 
@@ -280,6 +284,9 @@ docker tag mirror.gcr.io/falkordb/falkordb:latest falkordb/falkordb:latest
 ## Data sources — all public, all keyless
 
 No credentials, no private data, nothing behind a login — as the hackathon rules require.
+
+People are stored by public npm username only. The registry also returns each maintainer's email;
+Keystone drops it at ingest, because the graph has no use for personal contact details.
 
 | Source | Gives |
 |---|---|

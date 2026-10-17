@@ -63,7 +63,7 @@ Then run `python -m keystone.scripts.bootstrap` once against it to build the gra
 
 ```bash
 curl https://<your-url>/api/health      # {"ok":true,"packages":1265}
-curl https://<your-url>/api/overview    # hijack_count should be 497
+curl https://<your-url>/api/overview    # hijack_count should be 498 (as of 18 Oct; see README)
 ```
 
 Then open the root URL: the hero should read **20.9%** and the dumbbell's top row **qix at 13.8×**.

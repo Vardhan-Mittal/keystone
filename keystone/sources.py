@@ -208,8 +208,10 @@ async def package_latest(client: httpx.AsyncClient, name: str) -> dict[str, Any]
         return {
             "name": d.get("name") or name,
             "version": d.get("version") or "",
+            # Usernames only. The registry also returns each maintainer's email,
+            # which is personal data the graph has no use for, so it is dropped here.
             "maintainers": [
-                {"username": m.get("name") or "", "email": m.get("email") or ""}
+                {"username": m.get("name") or ""}
                 for m in (d.get("maintainers") or [])
                 if m.get("name")
             ],
