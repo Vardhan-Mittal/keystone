@@ -8,6 +8,8 @@ Built for [Graph Hacks: Context for AI Agents](https://www.wemakedevs.org/hackat
 **Live demo: https://keystone-yiur.onrender.com** — Render free tier, so the first visit after it
 has been idle takes about 40 s while the container wakes and rebuilds the graph.
 
+[![Keystone: 20.9% of gatsby's dependency tree is reachable by one account, and the graph independently ranks the account hijacked in the September 2025 npm attack](docs/overview.png)](https://keystone-yiur.onrender.com)
+
 ---
 
 ## The problem
@@ -64,6 +66,15 @@ Keystone was pointed at a tree with no connection to that incident and surfaced 
 that was hijacked and one of the packages it was used to poison, by structure alone. He was the
 *victim* of that attack. The tool measures **position in a graph, never a person's
 trustworthiness.**
+
+### The agent, showing its work
+
+Ask a question and a Gemini agent picks from eight graph tools, runs them against FalkorDB, and
+chains them until it can answer. The page shows every call it made, in order, with the Cypher each
+one ran. Below, "what if qix gets phished?" takes three: resolve the account, measure its blast
+radius, then trace the path it reaches the app by.
+
+[![The agent answering "what if qix gets phished?" with three chained graph tool calls and the Cypher each ran](docs/agent.png)](https://keystone-yiur.onrender.com/?q=what%20if%20qix%20gets%20phished%3F)
 
 ---
 
@@ -258,6 +269,10 @@ Set `GEMINI_API_KEY` for natural-language tool selection. **Without a key everyt
 works** — a deterministic router (`keystone/agent/router.py`) picks the tool from keywords and
 resolves entity names through the graph's own full-text indexes. That is not a shortcut; it is
 so a live demo cannot be killed by a rate limit.
+
+`KEYSTONE_MODEL` is an ordered, comma-separated list (default `gemini-3.8-flash,gemini-3.5-flash-lite`).
+Free-tier quotas are per model, so when the first is rate-limited the next answers. Successful answers
+are cached by question: the graph is read-only, so they cannot go stale.
 
 ```bash
 export GEMINI_API_KEY=...
